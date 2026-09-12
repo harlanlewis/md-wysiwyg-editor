@@ -96,6 +96,45 @@ public struct RowAvailability: Sendable, Equatable {
             : .available()
     }
 
+    /// The summon row, from what macOS said about the chord in force.
+    ///
+    /// `refused` is that chord, and nil means the registration was taken. **Nil
+    /// says nothing rather than confirming the chord, and the silence is the rule
+    /// rather than a missing sentence.** `GlobalHotkey.registrationOptions`
+    /// measures why: a refusal
+    /// proves the summon is dead, and a clean status proves nothing either way,
+    /// because a holder that registered plainly does not refuse us and the keys
+    /// macOS binds outside the Carbon registry never reach it at all. A row
+    /// reading "this combination is yours" off a clean status would be claiming
+    /// what nothing on this machine can check.
+    ///
+    /// A warning rather than `blocked`: the recorder still takes a click, and
+    /// recording a replacement is the one move that fixes this.
+    ///
+    /// The ways back in come from `AppPresence` rather than being named here,
+    /// so the escape hatch this sentence offers is one the app is actually
+    /// showing. Naming the menu-bar icon unconditionally would be wrong for
+    /// somebody running with the Dock icon and no menu-bar item, which is a
+    /// configuration that rule permits.
+    /// It takes the combo rather than a spelling, so the chord is drawn by
+    /// `HotkeyCombo.symbols` here and cannot be spelled two ways by two screens,
+    /// which is how the two sentences this replaces came apart in the first
+    /// place.
+    public static func summon(refused: HotkeyCombo?, menuBar: Bool, dock: Bool) -> RowAvailability {
+        guard let refused else { return .available() }
+        let waysIn = AppPresence.Surface.allCases
+            .filter { AppPresence.isShown($0, menuBar: menuBar, dock: dock) }
+            .map(\.name)
+        let refusal = "macOS refused \(refused.symbols); another app may own it."
+        // Unreachable by `AppPresence`'s invariant, and still answered rather
+        // than asserted: a rule that trapped here would take the app down over
+        // a sentence, and a half-sentence about an escape hatch that does not
+        // exist is worse than none.
+        guard !waysIn.isEmpty else { return .warning(refusal) }
+        return .warning(refusal + " Birta Writer still opens from "
+                        + waysIn.joined(separator: " or ") + ".")
+    }
+
     /// The start-at-login row, from what the system reported.
     ///
     /// `LoginItemState` already answers both halves; this is the adapter that

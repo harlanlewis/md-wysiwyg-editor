@@ -137,6 +137,12 @@ final class Coordinator {
     /// has changed it. The key is one registration for the process, so this
     /// window can only ask.
     var onHotkeyChanged: (() -> OSStatus)?
+
+    /// The chord macOS refused, asked for rather than remembered, for the same
+    /// reason as above: the registration belongs to the process and this window
+    /// is a reader of it. Nil means it holds one, which is NOT a promise that
+    /// the chord works; `RowAvailability.summon` has the measurement.
+    var refusedSummonCombo: (() -> HotkeyCombo?)?
     /// A flush in flight: what to run when it lands, and whether its own
     /// result may be written straight to disk.
     ///
@@ -2559,7 +2565,8 @@ final class Coordinator {
 
     private func makeWelcome() -> WelcomeView {
         let view = WelcomeView(flavour: .current,
-                               onHotkeyChange: { [weak self] in self?.onHotkeyChanged?() ?? -1 })
+                               onHotkeyChange: { [weak self] in self?.onHotkeyChanged?() ?? -1 },
+                               refusedSummonCombo: { [weak self] in self?.refusedSummonCombo?() })
         view.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(view)
         NSLayoutConstraint.activate([
