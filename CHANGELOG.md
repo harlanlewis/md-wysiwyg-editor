@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+---
+
+## [2026.912.0] - 2026, September 12
+
 ### Changed
 
 - Opening a block's menu on a long document no longer pauses the editor first. Clicking a gutter handle made the editor ask, for every node in the file, whether that node was one it could fold, and each of those questions searched the document from the top to find the node it had just been handed. That got worse faster than the document got longer, so on a long outline the menu arrived after a visible hitch, every time it was opened. The menu holds the same rows, enabled and disabled the same way, and Fold All still folds everything.
