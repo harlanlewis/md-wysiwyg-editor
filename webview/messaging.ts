@@ -494,32 +494,48 @@ export function notifyCrash(
  * Whether a `message` event came from the host rather than from something the
  * page embeds.
  *
- * Every host delivers inbound messages by `window.postMessage`, and there are
- * only two windows one can arrive from. The Mac app posts to the page's own
- * window (`WebHost.send`, in the page content world), and so does every e2e
- * harness page that stubs the API and answers `ready` itself. VS Code relays
- * from the frame hosting the page, and so does `e2e/frameHost`
- * (docs/HOSTING.md). A top-level page satisfies both at once, because
- * `window.parent` IS `window` there, so this is one claim rather than a
- * two-host disjunction: the sender is this page, or the page hosting it.
+ * What has to be refused is a frame the page itself embeds. `utils/embedCard.ts`
+ * builds one per played embed with `allow-scripts`, from a roster that includes
+ * hosts serving whatever a stranger published, so the framed script is not
+ * assumed to be friendly. `ToWebviewMessage` carries `init` and `externalUpdate`,
+ * whose `content` REPLACES the document that the sync pipeline then carries to
+ * the TextDocument and to disk, so a forged one is a write to the user's file.
  *
- * What it refuses is the only other window that can reach this listener: a
- * frame the page itself embeds. `utils/embedCard.ts` builds one per played
- * embed with `allow-scripts`, from a roster that includes hosts serving
- * whatever a stranger published, so the framed script is not assumed to be
- * friendly. `ToWebviewMessage` carries `init` and `externalUpdate`, whose
- * `content` REPLACES the document that the sync pipeline then carries to the
- * TextDocument and to disk, so a forged one is a write to the user's file.
- * A child's `contentWindow` is neither `window` nor `window.parent` under any
- * hosting arrangement, which is the whole of the discrimination.
+ * The test is descendancy, and it is stated as a refusal rather than as an
+ * allow-list of hosts, because the hosts turned out not to be enumerable. An
+ * embed is a frame of THIS page and so appears in `window.frames`; a host is
+ * not a frame of this page under any arrangement.
  *
- * A null `source` is refused with everything else. A real `postMessage`
- * always sets one, so null means a synthetic event, and admitting it would
- * widen the check for the benefit of test construction alone. A test that
- * needs to be heard posts for real.
+ * Do not restate this as "the sender is this page or the page hosting it". That
+ * was the first form and it took the editor down in every VS Code version for
+ * three days: inside a VS Code webview, `window.parent` IS `window`, and the
+ * host's message arrives from a third window that is neither. Measured, from the
+ * running extension host: `parentIsWindow: true`, `isWindow: false`,
+ * `isParent: false`, `origin: "vscode-webview://<id>"`. The disjunction collapsed
+ * to one term and that term never matched, so every `init` was dropped and the
+ * editor never painted.
+ *
+ * Origin cannot do this job either, and `e2e/hostMessageOrigin` is why: it serves
+ * its hostile frame from the page's own origin deliberately, as the harder case
+ * to refuse.
+ *
+ * The known limit, stated because a reader will otherwise assume it is covered:
+ * `window.frames` holds direct children, so a frame nested INSIDE an embed is
+ * not matched here and would be admitted. Closing that needs a token the host
+ * puts in every message, which is a change in all three host declarers.
+ *
+ * A null `source` is refused. A real `postMessage` always sets one, so null means
+ * a synthetic event, and admitting it would widen the check for the benefit of
+ * test construction alone. A test that needs to be heard posts for real.
  */
 function isHostMessage(event: MessageEvent): boolean {
-    return event.source === window || event.source === window.parent;
+    const source = event.source;
+    if (source === null || source === undefined) { return false; }
+    if (source === window) { return true; }
+    for (let i = 0; i < window.frames.length; i += 1) {
+        if (source === window.frames[i]) { return false; }
+    }
+    return true;
 }
 
 export function onMessage(handler: (msg: IncomingMessage) => void): void {

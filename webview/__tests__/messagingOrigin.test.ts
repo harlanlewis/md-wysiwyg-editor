@@ -11,9 +11,12 @@
  * `e2e/frameHost` covers the hosted-in-a-frame case, where the parent is a
  * genuinely different window from the page.
  *
- * There is no arm here asserting that the `window` and `window.parent` cases
- * are distinct. On a top-level page `window.parent` IS `window`, so such an
- * arm would be asserting a fiction that happens to pass.
+ * The arm that matters most is "a window that is not this page's descendant",
+ * because its absence is what let a predicate ship that refused every host
+ * message in VS Code for three days. Inside a VS Code webview the host is a
+ * third window: not `window`, and not `window.parent`, which there IS `window`.
+ * Nothing in this file or in either e2e suite presented such a sender, so every
+ * check passed over an editor that could not receive an `init`.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import "./setup";
@@ -54,6 +57,31 @@ describe("onMessage — who may speak into the page", () => {
 
         post(child, { type: "externalUpdate", content: "# Forged", syncVersion: 99 });
         expect(received).toHaveLength(0);
+    });
+
+    it("a message from a sender that is neither this page nor one of its frames should be delivered", () => {
+        // This is the shape the VS Code host has and the shape the previous
+        // predicate refused. jsdom cannot build a foreign window to order: a
+        // detached frame's window is torn down, and a nested frame's window is
+        // the documented hole rather than the host case. A `MessagePort` is a
+        // real `MessageEventSource` that is neither this page nor one of its
+        // frames, so it pins the predicate's SHAPE, which is the part that was
+        // wrong. Whether VS Code's actual sender has that shape is a question
+        // only the extension host can answer, and the integration suite asks it.
+        const outsider = new MessageChannel().port1;
+
+        // The instrument before the verdict: if this stand-in were somehow a
+        // frame of the page, the delivery below would mean the opposite.
+        // Compared by identity in a plain loop rather than with `toContain`,
+        // which deep-compares and recurses forever on a MessagePort.
+        let listedAsFrame = false;
+        for (let i = 0; i < window.frames.length; i += 1) {
+            if ((window.frames[i] as unknown) === (outsider as unknown)) { listedAsFrame = true; }
+        }
+        expect(listedAsFrame).toBe(false);
+
+        post(outsider, { type: "init", content: "# Host", syncVersion: 1 });
+        expect(received).toHaveLength(1);
     });
 
     it("a message with no source should be dropped", () => {
