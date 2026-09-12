@@ -87,10 +87,16 @@ public enum AppFlavor: String, CaseIterable, Sendable {
     /// The summon combination a fresh install starts with.
     ///
     /// Different per flavour because a global hotkey is first come first
-    /// served: two apps asking for the same one means the second to launch
-    /// does not get it, and the only sign is a caption in Settings nobody has
-    /// opened. Shift is what the development build adds, so the two are
-    /// related enough to remember and never the same.
+    /// served: two apps asking for the same one means the second to launch does
+    /// not get it, and what that looks like is nothing happening. Shift is what
+    /// the development build adds, so the two are related enough to remember and
+    /// never the same.
+    ///
+    /// A refusal is now said on the two screens that show the chord, through
+    /// `RowAvailability.summon`. It is still worth keeping the flavours apart
+    /// rather than relying on that: macOS reports the conflict only when the app
+    /// that got there first also asked exclusively, so two copies of this app
+    /// would be the case it catches and most other collisions are not.
     public var defaultHotkey: HotkeyCombo {
         switch self {
         case .release: return .release

@@ -145,6 +145,7 @@ final class WindowSet {
             self?.close(coordinator)
         }
         coordinator.onHotkeyChanged = { [weak self] in self?.registerHotkey() ?? -1 }
+        coordinator.refusedSummonCombo = { [weak self] in self?.refusedSummonCombo }
         coordinator.onNewWindowRequest = { [weak self] in self?.newNote() }
         coordinator.makeRecentsMenu = { [weak self] in self?.recentsMenu() ?? RecentsMenu() }
         coordinator.onOpenRequest = { [weak self] url in
@@ -575,6 +576,12 @@ final class WindowSet {
     // MARK: process-wide registrations
 
     func start() {
+        // The log is for whoever is reading a console, and it is NOT the whole
+        // of the handling: `register` keeps the chord it was refused, and the
+        // first-run screen and the Settings pane both report it through
+        // `RowAvailability.summon` when they open. This log alone was the whole
+        // of it, which is what made a dead summon indistinguishable from a
+        // broken app (MAR-407).
         let status = registerHotkey()
         if status != noErr {
             NSLog("Birta Writer: hotkey \(Prefs.hotkey.spelling) registration failed (\(status)); another app may own it")
@@ -622,6 +629,14 @@ final class WindowSet {
     /// first-run screen both reach this, and both need the status back: an
     /// exclusive registration is the only way a chord another app already owns
     /// is ever reported at all.
+    /// The chord macOS refused, or nil while it holds one.
+    ///
+    /// The surfaces that report it read it from here rather than being handed
+    /// the status at launch, because the launch attempt happens before either
+    /// of them exists. One registration, one answer, asked for when there is
+    /// somewhere to draw it.
+    var refusedSummonCombo: HotkeyCombo? { hotkey.refusedCombo }
+
     @discardableResult
     func registerHotkey() -> OSStatus {
         hotkey.onPress = { [weak self] in

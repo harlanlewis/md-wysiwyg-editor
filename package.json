@@ -2765,7 +2765,7 @@
         "@vscode/vsce": "^3.9.2",
         "esbuild": "^0.28.2",
         "jsdom": "30.0.1",
-        "mocha": "^12.0.0",
+        "mocha": "^11.8.0",
         "ovsx": "1.2.0",
         "playwright": "^1.63.0",
         "typescript": "^6.0.3",

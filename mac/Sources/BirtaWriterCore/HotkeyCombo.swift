@@ -27,9 +27,11 @@ public struct HotkeyCombo: Equatable, Sendable {
 
     /// The development build's, which adds Shift.
     ///
-    /// A global hotkey is first come first served, so two builds asking for
-    /// the same one means the second to launch does not get it, and the only
-    /// sign is a caption in a Settings pane nobody has opened.
+    /// A global hotkey is first come first served, so two builds asking for the
+    /// same one means the second to launch does not get it, and what that looks
+    /// like is the summon doing nothing at all. `RowAvailability.summon` is what
+    /// says so, on the first-run screen and in Settings; two copies of this app
+    /// are the case macOS actually reports, because both ask exclusively.
     public static let dev = HotkeyCombo(keyCode: 38, modifiers: cmdKey | optionKey | controlKey | shiftKey, spelling: "cmd+alt+ctrl+shift+j")
 
     /// This build's default, whichever it is.

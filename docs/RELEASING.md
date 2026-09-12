@@ -146,10 +146,21 @@ Set these in the repo, under Settings → Secrets and variables → Actions.
 | `AZURE_TENANT_ID`   | Required alongside `AZURE_CLIENT_ID`              | set to publish   |
 | `OVSX_PAT`          | Also publishes to Open VSX                        | set to publish   |
 | `RELEASE_TOKEN`     | Commits the rolled changelogs back to `main`      | needed to stamp  |
+| `LINEAR_API_KEY`    | Raises a blocked release in Linear instead of nowhere | needed to be told |
 
 With neither `AZURE_CLIENT_ID` nor `OVSX_PAT`, a release builds the downloadable `.vsix` and stops. That is the "build it, don't publish yet" phase. The two registry secrets are independent, so either can be added on its own.
 
 `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` are not secrets in the usual sense. They are identifiers, not credentials, and nothing about them expires. They are stored as secrets only to keep the tenant out of public logs.
+
+### When a release fails, and how you find out
+
+A blocked release is silent by construction. The publish jobs are `needs: release`, so a failure in the first job skips the rest: no tag, no GitHub Release, no Marketplace or Open VSX publish, and no Mac app asset. An installed copy then asks for an update and is told it is up to date, truthfully, because the newest release really is the last one that succeeded. Nothing about the product looks broken from the outside, which is the whole problem.
+
+GitHub's own scheduled-workflow-failure email is not enough on its own to carry this, and the two reasons are mechanical rather than a matter of attention: it goes to whoever last touched the cron rather than to the repo owner by definition, and it is an Actions notification, which is the class most recipients filter.
+
+So the `alert` job writes the failure into Linear as an Urgent issue in team `MAR`, and comments on that issue rather than filing a second one on each further night, so its age is how long shipping has been blocked. It needs `LINEAR_API_KEY`. Without the secret it degrades to a run summary and says in that summary that no alert was raised; it never fails the workflow, because the release has already failed and a second failure would only bury the first one's diagnosis.
+
+The alert says a release is blocked. It does not say why, and it deliberately does not guess: read the failing step in the run it links.
 
 ### `RELEASE_TOKEN` is a real credential
 
