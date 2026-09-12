@@ -61,9 +61,12 @@ final class WelcomeView: NSView {
     /// explicitly by the one production caller.
     let flavour: AppFlavor
 
-    init(flavour: AppFlavor, onHotkeyChange: @escaping () -> OSStatus) {
+    init(flavour: AppFlavor,
+         onHotkeyChange: @escaping () -> OSStatus,
+         refusedSummonCombo: @escaping () -> HotkeyCombo? = { nil }) {
         self.flavour = flavour
         self.onHotkeyChange = onHotkeyChange
+        self.refusedSummonCombo = refusedSummonCombo
         super.init(frame: .zero)
         build()
     }
@@ -71,6 +74,11 @@ final class WelcomeView: NSView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     private let onHotkeyChange: () -> OSStatus
+    /// The chord macOS refused, or nil while it holds one. The same reader
+    /// Settings takes, for a different reason: this is the FIRST run, so it is
+    /// the one screen a refusal of the DEFAULT chord can reach before somebody
+    /// has pressed it and concluded the app is broken.
+    private let refusedSummonCombo: () -> HotkeyCombo?
 
     /// The hero, at the size a first-run screen wants it.
     private static let heroSide: CGFloat = 96
@@ -100,6 +108,11 @@ final class WelcomeView: NSView {
             ? NSColor(srgbRed: 0x37 / 255.0, green: 0x3D / 255.0, blue: 0x34 / 255.0, alpha: 1)
             : NSColor(srgbRed: 0xF3 / 255.0, green: 0xEF / 255.0, blue: 0xE3 / 255.0, alpha: 1)
     }
+
+    /// One drawn row, for a check that reads a sentence back off it. The same
+    /// accessor `SettingsWindowController` exposes, so the two screens are
+    /// checked the same way.
+    func rowForTesting(_ row: SettingsRow) -> SettingsRowView? { rowViews[row] }
 
     /// The ground, for the check that it differs between appearances. The
     /// colour itself stays private: what is exposed is a reader, so a test
@@ -319,6 +332,30 @@ final class WelcomeView: NSView {
         showAutoUpdate()
         showLoginItem(LoginItem.state)
         showLocation()
+        showSummon()
+    }
+
+    /// What the summon row says about the chord in force.
+    ///
+    /// The reason this screen needs it at all: the chord here is the DEFAULT,
+    /// nobody has recorded anything, and a refusal of it used to reach an
+    /// `NSLog` and stop. So the one screen that teaches the summon could teach a
+    /// chord macOS had already declined, and the next thing that happened was
+    /// somebody pressing it and getting nothing (MAR-407).
+    private func showSummon() {
+        showSummon(refused: refusedSummonCombo())
+    }
+
+    /// Told what was refused, for the reason the Settings pane's pair gives:
+    /// the recorder reads the attempt it just made rather than trusting a
+    /// second closure to be wired to the same registration.
+    private func showSummon(refused: HotkeyCombo?) {
+        // `problemsOnly` as every row here does: this screen asks questions
+        // rather than documenting answers, and a refusal is a problem, so it
+        // survives the trim.
+        rowViews[.summon]?.apply(RowAvailability.summon(
+            refused: refused,
+            menuBar: Prefs.showInMenuBar, dock: Prefs.showInDock).problemsOnly)
     }
 
     /// The update row, which a development build cannot honour.
@@ -387,9 +424,7 @@ final class WelcomeView: NSView {
     private func hotkeyChosen(_ combo: HotkeyCombo) {
         Prefs.hotkey = combo
         let status = onHotkeyChange()
-        rowViews[.summon]?.apply(status == noErr
-            ? .available()
-            : .warning("That combination is taken by another app."))
+        showSummon(refused: status == noErr ? nil : combo)
     }
 
     /// The same gesture Settings' row makes, and `NoteLocationChange` is what
@@ -409,6 +444,11 @@ final class WelcomeView: NSView {
         // than there, because this is somebody's first run and the window that
         // would go behind is the one asking them the questions.
         AppDelegate.applyActivationPolicy(keepingFrontmost: true)
+        // The summon row's escape hatch names the Dock icon when it is shown, so
+        // it follows this switch. Settings does the same from `showPresence`,
+        // which this screen has no copy of: the menu-bar row is not one of the
+        // questions a first run asks.
+        showSummon()
     }
 
     /// macOS can refuse the registration, and the switch has to follow what the

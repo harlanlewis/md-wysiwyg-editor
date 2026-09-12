@@ -57,6 +57,68 @@ final class WelcomeScreenTests: XCTestCase {
                        + drawn.joined(separator: " | "))
     }
 
+    /// The first run teaches the summon, so it is the one screen that must not
+    /// teach a chord macOS has already declined (MAR-407).
+    ///
+    /// This is the half the ticket's severity argument rests on: the summon is
+    /// the behaviour that has to be learned or the app is not opened again, and
+    /// on this screen nobody has recorded anything, so a refusal of the DEFAULT
+    /// chord was reported nowhere at all. Opening the screen is the only
+    /// gesture; deleting `showSummon()` from `sync()` turns this red.
+    func testTheFirstRunScreenShouldReportADefaultChordTheSystemRefused() {
+        let refused = HotkeyCombo.release
+        let welcome = WelcomeView(flavour: .release, onHotkeyChange: { 0 },
+                                 refusedSummonCombo: { refused })
+        welcome.layoutSubtreeIfNeeded()
+
+        guard let row = welcome.rowForTesting(.summon) else {
+            return XCTFail("the first-run screen draws no summon row")
+        }
+        XCTAssertEqual(row.caption?.textColor, .systemRed)
+        XCTAssertTrue(row.caption?.stringValue.contains(refused.symbols) ?? false,
+                      "the row does not name the refused chord: \(row.caption?.stringValue ?? "<nothing>")")
+        XCTAssertFalse(row.caption?.isHidden ?? true)
+    }
+
+    /// The screen trims prose it has no room for, and the refusal is not prose.
+    /// Without this the arm above could pass while a clean run showed a
+    /// sentence too, which would make the red mean nothing.
+    func testTheFirstRunScreenShouldStaySilentAboutAChordTheSystemTook() {
+        let welcome = WelcomeView(flavour: .release, onHotkeyChange: { 0 })
+        welcome.layoutSubtreeIfNeeded()
+
+        guard let row = welcome.rowForTesting(.summon) else {
+            return XCTFail("the first-run screen draws no summon row")
+        }
+        XCTAssertTrue(row.caption?.isHidden ?? false)
+    }
+
+    /// Both screens word one refusal one way.
+    ///
+    /// They did not: Settings said "macOS refused ⌘⌥⌃J; another app may own it."
+    /// and this screen said "That combination is taken by another app.", which
+    /// is the split `RowAvailability`'s own header argues against and which was
+    /// recorded on MAR-407 rather than filed. Read off the two REAL rows rather
+    /// than compared as two calls to the rule, because the rule agreeing with
+    /// itself is not the claim.
+    func testTheTwoScreensShouldWordARefusedChordTheSameWay() {
+        let refused = HotkeyCombo.release
+        let welcome = WelcomeView(flavour: .release, onHotkeyChange: { 0 },
+                                 refusedSummonCombo: { refused })
+        welcome.layoutSubtreeIfNeeded()
+        let controller = SettingsWindowController(
+            flavour: .release, onHotkeyChange: { 0 }, refusedSummonCombo: { refused },
+            onChange: { _ in }, onChangeEverywhere: {}, onShowWelcome: {},
+            onCheckForUpdates: {})
+        defer { controller.window?.close() }
+        controller.selectTabForTesting("general")
+
+        let onboarding = welcome.rowForTesting(.summon)?.caption?.stringValue
+        let settings = controller.rowForTesting(.summon)?.caption?.stringValue
+        XCTAssertFalse(onboarding?.isEmpty ?? true, "nothing was read off the first-run row")
+        XCTAssertEqual(onboarding, settings)
+    }
+
     /// The mark is the only place the app says its own name here.
     ///
     /// A heading under the logo is that name twice, once drawn and once set,

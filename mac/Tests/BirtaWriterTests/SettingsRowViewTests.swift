@@ -107,6 +107,55 @@ final class SettingsRowViewTests: XCTestCase {
         XCTAssertFalse(row.caption?.stringValue.isEmpty ?? true)
     }
 
+    /// A refusal that happened at LAUNCH reaches the pane somebody opens to
+    /// find out why the summon does nothing.
+    ///
+    /// The bug this pins (MAR-407): the sentence was written only in
+    /// `hotkeyChosen`, so it existed for somebody who RECORDED a new chord and
+    /// for nobody else. A refused default chord produced one `NSLog` line and a
+    /// row that read as ordinary, and two comments in the tree described a
+    /// Settings caption that was never drawn for this case.
+    ///
+    /// No chord is recorded here, which is the whole point: the only gesture is
+    /// opening the pane. Deleting the `showSummon()` call from `showPresence`,
+    /// which is the pane's open path, turns this red and leaves the recorder
+    /// check below green.
+    func testThePaneShouldReportAChordRefusedBeforeItWasOpened() {
+        let refused = HotkeyCombo.release
+        let controller = SettingsWindowController(
+            // A clean status from the recorder, so nothing this test reads can
+            // have come from a registration attempt: the caption below is the
+            // stored refusal or it is nothing.
+            flavour: .release, onHotkeyChange: { 0 },
+            refusedSummonCombo: { refused },
+            onChange: { _ in }, onChangeEverywhere: {}, onShowWelcome: {},
+            onCheckForUpdates: {})
+        defer { controller.window?.close() }
+        controller.selectTabForTesting("general")
+
+        guard let row = controller.rowForTesting(.summon) else {
+            return XCTFail("the General pane draws no summon row")
+        }
+        XCTAssertEqual(row.caption?.textColor, .systemRed)
+        XCTAssertTrue(row.caption?.stringValue.contains(refused.symbols) ?? false,
+                      "the row does not name the refused chord: \(row.caption?.stringValue ?? "<nothing>")")
+        XCTAssertFalse(row.caption?.isHidden ?? true, "a caption nobody can see is the bug, one layer down")
+    }
+
+    /// And the other direction, which is what stops the check above passing on a
+    /// build that simply reds the summon row always.
+    func testThePaneShouldSayNothingAboutAChordTheSystemTook() {
+        let controller = makeController(.release)
+        defer { controller.window?.close() }
+        controller.selectTabForTesting("general")
+
+        guard let row = controller.rowForTesting(.summon) else {
+            return XCTFail("the General pane draws no summon row")
+        }
+        XCTAssertTrue(row.caption?.isHidden ?? false,
+                      "a clean registration is not evidence the chord works, so the row claims nothing")
+    }
+
     /// The wiring, on the real pane: Settings hands the login row its answer.
     ///
     /// The check that would still pass if `apply` were never called from the

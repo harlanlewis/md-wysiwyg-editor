@@ -988,6 +988,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RecentsMenuProviding {
                 // it is legible here.
                 flavour: .current,
                 onHotkeyChange: { [weak self] in self?.windows.registerHotkey() ?? -1 },
+                refusedSummonCombo: { [weak self] in self?.windows.refusedSummonCombo },
                 onChange: { [weak self] work in self?.front?.preferencesChanged(beforeReload: work) },
                 onChangeEverywhere: { [weak self] in self?.windows.preferencesChangedEverywhere() },
                 onShowWelcome: { [weak self] in self?.showWelcome() },

@@ -17,6 +17,22 @@ final class GlobalHotkey {
     var onPress: () -> Void = {}
     private(set) var combo: HotkeyCombo?
 
+    /// The chord macOS would not register, or nil while it holds one.
+    ///
+    /// Kept rather than left to the caller of `register` to remember, because
+    /// the surfaces that report this are opened long after the registration
+    /// happened: the launch attempt is in `WindowSet.start()`, and the first
+    /// run screen and the Settings pane both have to be able to ask later.
+    ///
+    /// It stays true for as long as it is worth reading, and the reason is that
+    /// **nothing retries**. A refusal this app never re-attempts is still a
+    /// refusal, so the summon really is dead until somebody records a
+    /// replacement, which comes back through `register` and clears this. A
+    /// retry on a timer would be the thing that made this stale, and it would
+    /// also make the chord start working at a moment nobody was watching,
+    /// leaving the same question this surfaces, pointed the other way.
+    private(set) var refusedCombo: HotkeyCombo?
+
     init() {
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
@@ -81,6 +97,11 @@ final class GlobalHotkey {
             hotKeyRef = ref
             self.combo = combo
         }
+        // Both ways, so a replacement that macOS takes clears the refusal the
+        // one before it recorded. Set here rather than at the call site: this
+        // is the one place a registration is attempted, so it is the only place
+        // that cannot disagree with what actually happened.
+        refusedCombo = status == noErr ? nil : combo
         return status
     }
 
@@ -90,6 +111,9 @@ final class GlobalHotkey {
             hotKeyRef = nil
             combo = nil
         }
+        // NOT cleared here. `register` unregisters first, so clearing it would
+        // wipe the answer a fraction of a second before the attempt that
+        // replaces it, and `releaseHotkey` runs only on the way out.
     }
 
     deinit {

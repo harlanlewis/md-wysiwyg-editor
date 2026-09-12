@@ -228,6 +228,17 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     let flavour: AppFlavor
 
     private let onHotkeyChange: () -> OSStatus
+    /// The chord macOS refused, or nil while it holds one.
+    ///
+    /// A reader rather than a value, because the answer is older than this
+    /// window: the registration happens at launch, and this pane is what
+    /// somebody opens afterwards to find out. Defaulted to nil so the ten checks
+    /// that build this controller to look at something else are not each a place
+    /// to restate it. That default is also the one way this feature could die
+    /// silently, since dropping the argument at the call site would leave every
+    /// check green and every row reading as ordinary, so `SummonRefusalWiringTests`
+    /// holds each hop from the registration to here by name.
+    private let refusedSummonCombo: () -> HotkeyCombo?
     /// Re-read the preferences. The argument is work to run between the
     /// buffer's flush and the page's reload; only a location change uses it.
     private let onChange: (BeforeReload?) -> Void
@@ -248,12 +259,14 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
 
     init(flavour: AppFlavor,
          onHotkeyChange: @escaping () -> OSStatus,
+         refusedSummonCombo: @escaping () -> HotkeyCombo? = { nil },
          onChange: @escaping (BeforeReload?) -> Void,
          onChangeEverywhere: @escaping () -> Void,
          onShowWelcome: @escaping () -> Void,
          onCheckForUpdates: @escaping () -> Void) {
         self.flavour = flavour
         self.onHotkeyChange = onHotkeyChange
+        self.refusedSummonCombo = refusedSummonCombo
         self.onChange = onChange
         self.onChangeEverywhere = onChangeEverywhere
         self.onShowWelcome = onShowWelcome
@@ -688,7 +701,36 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
     private func showRowAvailability() {
         showAutoUpdate()
         showLoginItem(LoginItem.state)
+        // Which draws the summon row too, because its sentence names the
+        // surfaces this decides.
         showPresence()
+    }
+
+    /// What the summon row says about the chord in force.
+    ///
+    /// Here rather than only in `hotkeyChosen`, which is the gap this closes: a
+    /// refusal at launch used to reach an `NSLog` and nothing else, so the
+    /// sentence existed only for somebody who RECORDED a new chord and was gone
+    /// again the next time the pane opened. Somebody whose summon has never
+    /// worked opens this pane to find out why, and that is the one reader it
+    /// was invisible to (MAR-407).
+    private func showSummon() {
+        showSummon(refused: refusedSummonCombo())
+    }
+
+    /// The same row, told what was refused by the caller.
+    ///
+    /// Two callers with two sources for that one fact, deliberately. Opening
+    /// the pane reads the stored refusal, and recording a chord reads the status
+    /// of the attempt it just made: a recorder that went through the stored
+    /// reader instead would be trusting two injected closures to be wired to the
+    /// same registration, and a pair wired apart would draw a row that lies with
+    /// nothing to catch it. What they share is the SENTENCE, which is the thing
+    /// that had drifted.
+    private func showSummon(refused: HotkeyCombo?) {
+        rowViews[.summon]?.apply(RowAvailability.summon(
+            refused: refused,
+            menuBar: Prefs.showInMenuBar, dock: Prefs.showInDock))
     }
 
     /// The two rows saying where the app can be reached from.
@@ -708,6 +750,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
             control.isEnabled = availability.isEnabled
             rowViews[row]?.apply(availability)
         }
+        // The summon row follows, because a refusal's escape hatch NAMES these
+        // two surfaces. Drawn from here rather than beside it in
+        // `showRowAvailability` so that the two switches redraw it as well: the
+        // screen where somebody is recovering from a dead chord is the last
+        // place to leave a sentence pointing at an icon they just switched off.
+        showSummon()
     }
 
     /// The agent command exists only when the switch above it is on.
@@ -1337,9 +1385,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTe
         guard combo != Prefs.hotkey else { return }
         Prefs.hotkey = combo
         let status = onHotkeyChange()
-        rowViews[.summon]?.apply(status == 0
-            ? .available()
-            : .warning("macOS refused \(combo.symbols); another app may own it."))
+        showSummon(refused: status == noErr ? nil : combo)
         hotkeyRecorder.setCombo(combo)
     }
 
