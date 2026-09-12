@@ -12,6 +12,10 @@ Versions are shared. Both files are stamped with the same release version, and a
 
 ## [Unreleased]
 
+### Fixed
+
+- Birta Writer for Mac tells you when another app has taken its summon hotkey, instead of leaving you to conclude the app is broken. A global hotkey goes to whoever asked first, so the chord can be refused at launch and simply do nothing, and until now the app said so nowhere: the sentence about a refusal was written only for somebody who was in the middle of recording a replacement chord, which is not the person who has this problem. Settings and the first-run screen now both name the chord in force when you open them, and say when it was refused and how to reach the app in the meantime. Two things worth knowing about the limits of this, because they decide whether to trust it: a refusal is proof the summon will not work, but silence is not proof that it will, since some of what macOS binds is invisible to the check; and nothing retries in the background, so what the screen told you at launch is still true when you read it later.
+
 ### Security
 
 - Nothing can attach a Web Inspector to Birta Writer for Mac's editor any more. The release build shipped with the inspector enabled. Your note lives in that page rather than being read off the file, so a console over it could read what you were writing and rewrite it, and the app would then autosave whatever it left behind. macOS only ever allowed that from your own account, so it was never a way in from another machine or another user; what it offered was a surface to whatever else was already running as you. The DEVELOPMENT build keeps the inspector, which is the build that is for looking inside.
