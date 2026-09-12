@@ -316,6 +316,74 @@ jobs:
             if (prev) await github.rest.issues.updateComment({ owner, repo, comment_id: prev.id, body });
             else await github.rest.issues.createComment({ owner, repo, issue_number, body });
 
+  # The `engines.vscode` floor is the one runtime no other check here launches,
+  # and a dependency is the thing that routinely breaks it. mocha 12 is the
+  # worked example: ESM-only, and `require()` of an ESM graph needs Node 20.19
+  # while the floor's VS Code ships Node 20.18. It was green on every
+  # contributor's Node, green on stable VS Code, and green in every job above,
+  # and it blocked three nights of releases before anyone read the nightly's log.
+  # Until this job existed, the Release run was the first launch of the floor,
+  # which made a dependency bump a floor-compatibility change that nothing told
+  # you about until after it merged.
+  #
+  # Advisory rather than required, and behind a relevance check rather than a
+  # workflow-level `paths` filter, for the reason `launch-perf` records above: a
+  # required check that a paths filter skips leaves a PR waiting on a status that
+  # never arrives. This one is not required, so it may simply not run.
+  #
+  # The floor arm only. The nightly still runs floor AND stable, and stable is
+  # the laxer of the two: a break that stable catches and the floor does not is
+  # not a shape this repo has, while the reverse is exactly what happened.
+  integration-floor:
+    name: Integration Suite (engines floor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the relevance check diffs against the merge base
+
+      # Deliberately wider than "files that provably reach the floor": narrowing
+      # a gate to specific modules is how it silently stops covering what it was
+      # built for. `patches/` is here because a patched dependency is a
+      # dependency, and this file is here so a change to the gate runs the gate.
+      - name: Does this PR touch anything that can move floor compatibility?
+        id: relevant
+        run: |
+          CHANGED=$(git diff --name-only "${{ github.event.pull_request.base.sha }}...HEAD")
+          echo "changed files:"; echo "$CHANGED" | sed 's/^/  /'
+          if echo "$CHANGED" | grep -qE '^(package\.json|pnpm-lock\.yaml|patches/|src/test/|tsconfig\.integration\.json|\.github/workflows/ci\.yml)'; then
+            echo "value=true" >> "$GITHUB_OUTPUT"
+            echo "→ could move floor compatibility; launching the floor"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
+            echo "→ nothing dependency-shaped changed; skipping the floor launch"
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.relevant.outputs.value == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.relevant.outputs.value == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        if: steps.relevant.outputs.value == 'true'
+        run: pnpm install --frozen-lockfile
+
+      # xvfb: Electron needs a display. Same invocation as release.yml's own
+      # floor arm, so the two cannot drift into testing different things.
+      - name: Open the corpus in the engines floor
+        if: steps.relevant.outputs.value == 'true'
+        run: |
+          FLOOR=$(node -p "require('./package.json').engines.vscode.replace(/^\D+/, '')")
+          echo "engines.vscode floor: $FLOOR"
+          BIRTA_ITEST_VSCODE="$FLOOR" xvfb-run -a pnpm test:integration
+
 # The e2e suite (real bundle in headless Chromium) is a LOCAL pre-push gate,
 # run with `pnpm test:e2e`, not a CI job. Two suites are the exception, and
 # they run in .github/workflows/mac-app.yml under WebKit rather than here: see that

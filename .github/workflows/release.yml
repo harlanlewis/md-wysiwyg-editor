@@ -575,3 +575,39 @@ jobs:
             "mac/build/BirtaWriter-$VERSION.zip" \
             "mac/build/BirtaWriter-$VERSION.zip.sha256" \
             --clobber
+
+  # A blocked release is the one nightly failure that costs something every hour
+  # it stands, and it was the one with no failure handler. `perf-nightly` and
+  # `nightly-fidelity` both write a summary and both say out loud that they rely
+  # on GitHub's scheduled-failure email; this job exists because that email did
+  # not carry three nights of blocked releases (2026-09-10 through 2026-09-12) to
+  # anyone who acted on it.
+  #
+  # `always()` is what makes it run at all: without it the job inherits the
+  # default success-only condition and never fires on the case it is for. The
+  # `needs` list has to name every job, because `publish` and friends are
+  # `needs: release` and therefore report `skipped` rather than `failure` when
+  # the first job dies. `contains(needs.*.result, 'failure')` is true for a real
+  # failure in any of them and false for a run that simply had nothing to ship.
+  alert:
+    name: Alert on a blocked release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [release, publish, publish-openvsx, mac-app]
+    if: always() && contains(needs.*.result, 'failure')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # No `pnpm install`. The script uses only `fetch` and `fs`, deliberately,
+      # so an alert cannot be lost to the same dependency resolution that may be
+      # what broke the release it is reporting.
+      - name: Raise the blocked release in Linear
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: node scripts/alert-release-failure.mjs

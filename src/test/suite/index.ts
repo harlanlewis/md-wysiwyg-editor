@@ -4,6 +4,10 @@
  */
 import * as path from "path";
 import { promises as fs } from "fs";
+// mocha is pinned to 11 because 12 is ESM-only and this file runs inside the
+// Extension Host at the `engines.vscode` floor, whose Node cannot load an ESM
+// graph. `src/__tests__/integrationBootstrapEsm.test.ts` holds that constraint
+// and explains why no import style is a way around it.
 import Mocha from "mocha";
 
 export async function run(): Promise<void> {
